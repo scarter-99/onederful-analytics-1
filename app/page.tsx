@@ -34,7 +34,7 @@ export default function Home() {
     formData.append('file', fileState.file);
 
     try {
-      const response = await fetch('https://onederful.app.n8n.cloud/webhook-test/randomtest', {
+      const response = await fetch('/api/n8n-proxy', {
         method: 'POST',
         body: formData,
       });
