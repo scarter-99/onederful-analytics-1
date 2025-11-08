@@ -79,3 +79,19 @@ export function getRateLimitInfo(ip: string): {
 export function resetRateLimit(ip: string): void {
   ipStore.delete(ip);
 }
+
+/**
+ * Rate limit check for API routes
+ */
+export async function rateLimit(req: Request): Promise<{ ok: boolean }> {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+             req.headers.get('x-real-ip') ||
+             'unknown';
+
+  try {
+    checkRateLimit(ip);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}

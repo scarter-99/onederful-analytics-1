@@ -89,3 +89,20 @@ export function validateConfig(): void {
     throw new Error('AUTH_USERNAME and AUTH_PASSWORD required when AUTH_ENABLED=true');
   }
 }
+
+/**
+ * Get configuration for n8n forwarding
+ */
+export function getConfig() {
+  return {
+    n8nWebhookUrl: n8nConfig.webhookUrl,
+    n8nHookSecret: n8nConfig.hookSecret,
+    clientId: n8nConfig.clientId,
+    n8nTimeoutMs: n8nConfig.timeout,
+    n8nRetries: n8nConfig.retryAttempts,
+    maxFileBytes: uploadConfig.maxFileSize,
+    maxTotalBytes: uploadConfig.maxTotalSize,
+    maxFiles: uploadConfig.maxFileCount,
+    allowedExts: new Set(uploadConfig.allowedExtensions.map(ext => ext.replace(/^\./, ''))),
+  };
+}
