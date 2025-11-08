@@ -182,11 +182,11 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        throw new Error(data.message || 'Upload failed');
       }
 
       // Success
-      alert(`Successfully uploaded ${files.length} files!`);
+      alert(`Successfully uploaded ${data.fileCount || files.length} files!`);
 
       // Clear state
       setFiles([]);

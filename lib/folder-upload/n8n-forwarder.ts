@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { Agent } from 'node:https';
 
 export type N8nConfig = {
   webhookUrl: string;
@@ -38,7 +37,6 @@ export async function forwardToN8nMultipart(opts: {
   // IMPORTANT: do NOT set 'Content-Type' when sending FormData. Fetch will add boundary.
   const timeoutMs = n8n.timeoutMs ?? 60_000;
   const retries = n8n.retries ?? 2;
-  const agent = new Agent({ keepAlive: true });
 
   let last: ForwardResult = { status: 0, ok: false, bodyText: '', retries: 0 };
 
@@ -51,7 +49,6 @@ export async function forwardToN8nMultipart(opts: {
         headers,
         body: formData,
         signal: controller.signal,
-        dispatcher: agent as any,
       });
       clearTimeout(t);
       const txt = await res.text();
@@ -59,9 +56,10 @@ export async function forwardToN8nMultipart(opts: {
       if (res.ok) return last;
       if (res.status >= 500) { await backoff(attempt); continue; }
       return last; // 4xx: no retry
-    } catch (err: any) {
+    } catch (err) {
       clearTimeout(t);
-      last = { status: 0, ok: false, bodyText: String(err?.message ?? err), retries: attempt };
+      const message = err instanceof Error ? err.message : String(err);
+      last = { status: 0, ok: false, bodyText: message, retries: attempt };
       await backoff(attempt);
     }
   }
