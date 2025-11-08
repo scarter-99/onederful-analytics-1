@@ -1,4 +1,3 @@
-// lib/folder-upload/n8n-forwarder.ts
 import { createHash } from 'node:crypto';
 import { Agent } from 'node:https';
 
@@ -6,8 +5,8 @@ export type N8nConfig = {
   webhookUrl: string;
   hookSecret: string;
   clientId: string;
-  timeoutMs?: number;          // default 60000
-  retries?: number;            // default 2
+  timeoutMs?: number;   // default 60000
+  retries?: number;     // default 2
 };
 
 export type ForwardResult = {
@@ -19,11 +18,11 @@ export type ForwardResult = {
 
 export async function forwardToN8nMultipart(opts: {
   n8n: N8nConfig;
-  formData: FormData;          // already contains files[] with relative filenames and meta JSON
+  formData: FormData;      // contains files[] with relative filenames + optional 'meta'
   fileCount: number;
   totalBytes: number;
   batchId?: string;
-  metaJson?: string;           // same as appended 'meta' field; used to compute x-meta-sha256
+  metaJson?: string;
 }): Promise<ForwardResult> {
   const { n8n, formData, fileCount, totalBytes, batchId, metaJson } = opts;
 
@@ -36,10 +35,9 @@ export async function forwardToN8nMultipart(opts: {
   if (batchId) headers['x-batch-id'] = batchId;
   if (metaJson) headers['x-meta-sha256'] = sha256(metaJson);
 
-  // DO NOT set 'content-type' here. Let fetch derive it from FormData (includes boundary).
+  // IMPORTANT: do NOT set 'Content-Type' when sending FormData. Fetch will add boundary.
   const timeoutMs = n8n.timeoutMs ?? 60_000;
   const retries = n8n.retries ?? 2;
-
   const agent = new Agent({ keepAlive: true });
 
   let last: ForwardResult = { status: 0, ok: false, bodyText: '', retries: 0 };
@@ -53,24 +51,17 @@ export async function forwardToN8nMultipart(opts: {
         headers,
         body: formData,
         signal: controller.signal,
-        // @ts-expect-error - dispatcher is Node.js specific
-        dispatcher: agent,
+        dispatcher: agent as any,
       });
       clearTimeout(t);
-      const text = await res.text();
-      last = { status: res.status, ok: res.ok, bodyText: text, retries: attempt };
+      const txt = await res.text();
+      last = { status: res.status, ok: res.ok, bodyText: txt, retries: attempt };
       if (res.ok) return last;
-      // retry on 5xx
-      if (res.status >= 500) {
-        await backoff(attempt);
-        continue;
-      }
-      return last; // 4xx: do not retry
-    } catch (err) {
+      if (res.status >= 500) { await backoff(attempt); continue; }
+      return last; // 4xx: no retry
+    } catch (err: any) {
       clearTimeout(t);
-      const message = err instanceof Error ? err.message : String(err);
-      last = { status: 0, ok: false, bodyText: message, retries: attempt };
-      // network error → retry
+      last = { status: 0, ok: false, bodyText: String(err?.message ?? err), retries: attempt };
       await backoff(attempt);
     }
   }
@@ -80,7 +71,6 @@ export async function forwardToN8nMultipart(opts: {
 function sha256(s: string) {
   return createHash('sha256').update(s).digest('hex');
 }
-
 async function backoff(i: number) {
   const ms = i === 0 ? 500 : 1500;
   await new Promise(r => setTimeout(r, ms));

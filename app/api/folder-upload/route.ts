@@ -1,4 +1,3 @@
-// app/api/folder-upload/route.ts
 import { NextRequest } from 'next/server';
 import { forwardToN8nMultipart } from '@/lib/folder-upload/n8n-forwarder';
 import { DEFAULT_LIMITS, normalizeRelPath, extOf, isAllowedExt } from '@/lib/folder-upload/validation';
@@ -7,48 +6,56 @@ import { rateLimit } from '@/lib/folder-upload/rate-limit';
 
 export const runtime = 'nodejs';
 
+const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
+
 export async function POST(req: NextRequest) {
-  // Optional: basic rate limiting
   const rl = await rateLimit(req);
   if (!rl.ok) {
-    return new Response(JSON.stringify({ ok: false, message: 'Too many requests' }), { status: 429, headers: json });
+    return new Response(JSON.stringify({ ok: false, message: 'Too many requests' }), { status: 429, headers: JSON_HEADERS });
   }
 
   const cfg = getConfig();
-  // If you have Basic Auth on this route, validate here (omitted for brevity).
 
-  const inForm = await req.formData(); // MVP: fine for Node 18; swap to streaming for very large sets
+  // Parse inbound multipart (browser upload)
+  const incoming = await req.formData();
   const files: File[] = [];
   let metaJson = '';
 
-  for (const [k, v] of inForm.entries()) {
+  for (const [k, v] of incoming.entries()) {
     if (k === 'files[]' && v instanceof File) files.push(v);
-    if (k === 'meta' && typeof v === 'string') metaJson = v;
-  }
-  if (!files.length) {
-    return new Response(JSON.stringify({ ok: false, message: 'No files[] found' }), { status: 400, headers: json });
+    else if (k === 'meta' && typeof v === 'string') metaJson = v;
   }
 
-  // Validate and rebuild outbound FormData
+  if (!files.length) {
+    return new Response(JSON.stringify({ ok: false, message: 'No files[] found' }), { status: 400, headers: JSON_HEADERS });
+  }
+
+  // Validate + rebuild outbound FormData to n8n
   const out = new FormData();
   let totalBytes = 0;
   let count = 0;
 
+  const maxPerFile = cfg.maxFileBytes ?? DEFAULT_LIMITS.maxPerFileBytes;
+  const maxTotal = cfg.maxTotalBytes ?? DEFAULT_LIMITS.maxTotalBytes;
+  const allowed = cfg.allowedExts ?? DEFAULT_LIMITS.allowedExts;
+
   for (const f of files) {
-    const rel = normalizeRelPath(f.name); // browser set filename = webkitRelativePath
+    const rel = normalizeRelPath((f as any).name || f.name); // filename carries webkitRelativePath
     const ext = extOf(rel);
-    if (!isAllowedExt(ext, cfg.allowedExts ?? DEFAULT_LIMITS.allowedExts)) {
-      return new Response(JSON.stringify({ ok: false, message: `Disallowed type: ${rel}` }), { status: 400, headers: json });
+
+    if (!isAllowedExt(ext, allowed)) {
+      return new Response(JSON.stringify({ ok: false, message: `Disallowed type: ${rel}` }), { status: 400, headers: JSON_HEADERS });
     }
-    if (f.size > (cfg.maxFileBytes ?? DEFAULT_LIMITS.maxPerFileBytes)) {
-      return new Response(JSON.stringify({ ok: false, message: `File too large: ${rel}` }), { status: 400, headers: json });
+    if (f.size > maxPerFile) {
+      return new Response(JSON.stringify({ ok: false, message: `File too large: ${rel}` }), { status: 400, headers: JSON_HEADERS });
     }
     totalBytes += f.size;
     count++;
-    if (totalBytes > (cfg.maxTotalBytes ?? DEFAULT_LIMITS.maxTotalBytes)) {
-      return new Response(JSON.stringify({ ok: false, message: 'Total size exceeds limit' }), { status: 400, headers: json });
+    if (totalBytes > maxTotal) {
+      return new Response(JSON.stringify({ ok: false, message: 'Total size exceeds limit' }), { status: 400, headers: JSON_HEADERS });
     }
-    out.append('files[]', f, rel); // preserve relative paths
+
+    out.append('files[]', f, rel); // preserve relative paths in filename
   }
 
   if (metaJson) out.append('meta', metaJson);
@@ -71,8 +78,6 @@ export async function POST(req: NextRequest) {
   const payload = res.bodyText || (res.ok ? 'OK' : 'Error');
   return new Response(payload, {
     status: res.ok ? 200 : (res.status || 502),
-    headers: { ...json, 'x-retries': String(res.retries) },
+    headers: { ...JSON_HEADERS, 'x-retries': String(res.retries) },
   });
 }
-
-const json = { 'content-type': 'application/json; charset=utf-8' };
