@@ -172,8 +172,8 @@ export default function Home() {
         notes: notes || undefined,
       });
 
-      // Upload to API
-      const response = await fetch('/api/upload', {
+      // Upload to API (forwards to n8n)
+      const response = await fetch('/api/folder-upload', {
         method: 'POST',
         body: formData,
         signal: abortControllerRef.current.signal,
