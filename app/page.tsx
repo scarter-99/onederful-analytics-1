@@ -165,7 +165,7 @@ export default function Home() {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Create FormData with all files
+      // Create Data with all files
       const formData = createFormData(files, {
         uploaderEmail: uploaderEmail || undefined,
         shootName: shootName || undefined,
@@ -174,30 +174,30 @@ export default function Home() {
 
       // Upload to API (forwards to n8n)
       // Upload to API (forwards to n8n)
-      const response = await fetch('/api/folder-upload', {
-        method: 'POST',
-        body: formData,
-        signal: abortControllerRef.current.signal,
-      });
-      
-      const text = await response.text();
-      let data: any;
-      
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { error: text };
-      }
-      
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            data.message ||
-            `Upload failed with status ${response.status}`
-        );
-      }
-      
-      alert(`Successfully uploaded ${data.filesUploaded || files.length} files!`);
+        const response = await fetch('/api/folder-upload', {
+          method: 'POST',
+          body: formData,
+          signal: abortControllerRef.current.signal,
+        });
+        
+        const text = await response.text();
+        let data: any;
+        
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { error: text };
+        }
+        
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              data.message ||
+              `Upload failed with status ${response.status}`
+          );
+        }
+        
+        alert(`Successfully uploaded ${data.filesUploaded || files.length} files!`);
 
 
       // Clear state
